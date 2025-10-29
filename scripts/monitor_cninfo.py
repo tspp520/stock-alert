@@ -31,14 +31,15 @@ def build_template_card_msg(title: str, df: pd.DataFrame) -> dict:
     # 水平键值对列表（最多6项）
     horizontal_content_list = []
     for _, row in df.head(5).iterrows():
-        sec = str(row.get("SECNAME", row.get("SECCODE", "—"))).strip()
-        holder = str(row.get("F002V", "—")).strip().replace("\n", " ").replace("|", "/")[:20]
+        sec = str(row.get("SECNAME", row.get("SECCODE", "—"))).strip()[:8]  # 截断股票名
+        holder = str(row.get("F002V", "—")).strip().replace("\n", " ").replace("|", "/")[:15]  # 截断股东名，清理换行符
         amount = str(row.get("F004N", "—")).strip()
         date = str(row.get("VARYDATE", "—")).strip()
-        # 每条记录用一个字段展示，keyname 为序号，value 为简要信息
+        # 使用简洁格式，避免过长
+        value = f"{sec} | {holder} | {amount} | {date}"
         horizontal_content_list.append({
             "keyname": f"{len(horizontal_content_list)+1}.",
-            "value": f"{sec} | {holder} | {amount} | {date}"
+            "value": value
         })
 
     if len(df) > 5:
@@ -47,10 +48,11 @@ def build_template_card_msg(title: str, df: pd.DataFrame) -> dict:
             "value": f"共 {len(df)} 条，仅展示前5条"
         })
 
-    # 整体卡片点击跳转（可选，比如跳转到你的网页或 GitHub）
+    # 设置一个有效的跳转链接，或指向你的项目主页
+    # 如果不想跳转，可以指向一个空页面或数据源，但不能留空
     card_action = {
         "type": 1,
-        "url": "https://github.com/tspp520/stock-alert"  # 替换为你自己的链接
+        "url": "https://www.cninfo.com.cn/new/disclosure/stock?plate=szse&stockCode=000796"  # 示例：指向凯撒旅业公告页
     }
 
     return {
@@ -85,30 +87,6 @@ def is_within_recent_days(date_str: str, days=5) -> bool:
     except Exception:
         return False
 
-def send_wechat_markdown(content: str):
-    payload = {"msgtype": "markdown", "markdown": {"content": content}}
-    try:
-        res = requests.post(WEBHOOK, json=payload, timeout=10)
-        if res.status_code == 200:
-            print("✅ Markdown 消息发送成功")
-        else:
-            print(f"⚠️ 消息发送失败: {res.text}")
-    except Exception as e:
-        print(f"❌ 发送异常: {e}")
-
-def build_markdown_msg(title: str, df: pd.DataFrame) -> str:
-    lines = [f"### 🔔 {title}（新增 {len(df)} 条）"]
-    lines.append("| 股票 | 股东 | 数量(股) | 日期 |")
-    lines.append("|---|---|---|---|")
-    for _, row in df.head(8).iterrows():
-        sec = str(row.get("SECNAME", row.get("SECCODE", "—"))).strip()
-        holder = str(row.get("F002V", "—")).strip().replace("\n", " ").replace("|", "/")
-        amount = str(row.get("F004N", "—")).strip()
-        date = str(row.get("VARYDATE", "—")).strip()
-        lines.append(f"| {sec} | {holder} | {amount} | {date} |")
-    if len(df) > 8:
-        lines.append(f"\n> 共 {len(df)} 条，仅展示前8条")
-    return "\n".join(lines)
 
 def fetch_data(url, data_type="inc", time_mark="oneMonth"):
     params = {'type': data_type, 'timeMark': time_mark}
@@ -164,7 +142,6 @@ def compare_and_notify(new_df, old_df, title):
     if not diff.empty:
         card_msg = build_template_card_msg(title, diff)
         send_wechat_template_card(card_msg)
-
         return True
     return False
 
