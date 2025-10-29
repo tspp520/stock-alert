@@ -23,6 +23,57 @@ if not WEBHOOK:
     raise EnvironmentError("未设置 WECHAT_WEBHOOK 环境变量")
 
 # ====== 工具函数 ======
+def build_template_card_msg(title: str, df: pd.DataFrame) -> dict:
+    """构建 template_card 消息体（text_notice 类型）"""
+    # 主标题
+    main_title = {"title": f"🔔 {title}", "desc": f"新增 {len(df)} 条记录"}
+
+    # 水平键值对列表（最多6项）
+    horizontal_content_list = []
+    for _, row in df.head(5).iterrows():
+        sec = str(row.get("SECNAME", row.get("SECCODE", "—"))).strip()
+        holder = str(row.get("F002V", "—")).strip().replace("\n", " ").replace("|", "/")[:20]
+        amount = str(row.get("F004N", "—")).strip()
+        date = str(row.get("VARYDATE", "—")).strip()
+        # 每条记录用一个字段展示，keyname 为序号，value 为简要信息
+        horizontal_content_list.append({
+            "keyname": f"{len(horizontal_content_list)+1}.",
+            "value": f"{sec} | {holder} | {amount} | {date}"
+        })
+
+    if len(df) > 5:
+        horizontal_content_list.append({
+            "keyname": "…",
+            "value": f"共 {len(df)} 条，仅展示前5条"
+        })
+
+    # 整体卡片点击跳转（可选，比如跳转到你的网页或 GitHub）
+    card_action = {
+        "type": 1,
+        "url": "https://github.com/tspp520/stock-alert"  # 替换为你自己的链接
+    }
+
+    return {
+        "msgtype": "template_card",
+        "template_card": {
+            "card_type": "text_notice",
+            "main_title": main_title,
+            "horizontal_content_list": horizontal_content_list,
+            "card_action": card_action
+        }
+    }
+
+def send_wechat_template_card(card_msg: dict):
+    try:
+        res = requests.post(WEBHOOK, json=card_msg, timeout=10)
+        if res.status_code == 200:
+            print("✅ 模板卡片消息发送成功")
+        else:
+            print(f"⚠️ 消息发送失败: {res.text}")
+    except Exception as e:
+        print(f"❌ 发送异常: {e}")
+
+
 def is_within_recent_days(date_str: str, days=5) -> bool:
     """判断变动日期是否在最近 N 个自然日内（用于近似交易日）"""
     if not date_str or date_str == "N/A" or not isinstance(date_str, str):
@@ -111,8 +162,9 @@ def compare_and_notify(new_df, old_df, title):
         diff = merged[merged['_merge'] == 'left_only'].drop('_merge', axis=1)
 
     if not diff.empty:
-        md_msg = build_markdown_msg(title, diff)
-        send_wechat_markdown(md_msg)
+        card_msg = build_template_card_msg(title, diff)
+        send_wechat_template_card(card_msg)
+
         return True
     return False
 
